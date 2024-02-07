@@ -125,7 +125,7 @@ function displayStatistics(data) {
     table.appendChild(thead);
     table.appendChild(tbody);
 
-    const headings = ['No.', 'Label Name', 'Duration', 'Start Date', 'End Date', 'Start Time', 'End Time', 'Delete All'];
+    const headings = ['No.', 'Task', 'Duration', 'Start Date', 'End Date', 'Start Time', 'End Time', 'Delete All'];
     const trHead = document.createElement('tr');
     headings.forEach(heading => {
         const th = document.createElement('th');
@@ -232,6 +232,7 @@ document.getElementById('confirmEndSession').addEventListener('click', function(
     resetTimer();
     sessionActive = false; // Ensure sessionActive is reset
     $('#endSessionModal').modal('hide'); // Hide the modal after confirming
+    fetchAndDisplayInsights();
 });
 
 
@@ -249,6 +250,7 @@ function deleteStatistic(id) {
     .then(data => {
         console.log(data.message);
         fetchStatistic(); // Refresh the log table after deletion
+        fetchAndDisplayInsights();
     })
     .catch(error => console.error('Error:', error));
 }
@@ -264,6 +266,7 @@ function deleteAllStatistics() {
         .then(data => {
             console.log('All entries deleted:', data);
             fetchStatistic(); // Refresh the log table to show it's empty
+            fetchAndDisplayInsights();
         })
         .catch(error => console.error('Error deleting all statistics:', error));
     }
@@ -279,22 +282,50 @@ function updateDateDisplay() {
     fetchAndDisplayInsights();
 }
 
+function distributeDuration(startDate, duration, label, insights) {
+    const startDateTime = startDate.getTime();
+    const durationMilliseconds = duration * 1000; // Convert duration from seconds to milliseconds
+    const endDateTime = startDateTime + durationMilliseconds;
+    // Correctly calculate midnight without affecting the original startDate
+    let midnight = new Date(startDate);
+    midnight = new Date(midnight.setHours(24, 0, 0, 0)); // Correctly set to next midnight
+
+    const startDateStr = formatDate(startDate); // Ensure this returns 'YYYY-MM-DD'
+    if (!insights[startDateStr]) insights[startDateStr] = {};
+    
+    if (endDateTime <= midnight.getTime()) {
+        // If the end time doesn't go past midnight
+        insights[startDateStr][label] = (insights[startDateStr][label] || 0) + duration;
+    } else {
+        // Calculate the portion of the duration before and after midnight
+        const durationBeforeMidnight = (midnight.getTime() - startDateTime) / 1000;
+        const durationAfterMidnight = duration - durationBeforeMidnight;
+        insights[startDateStr][label] = (insights[startDateStr][label] || 0) + durationBeforeMidnight;
+
+        // Calculate and format the next day's date string
+        const nextDay = new Date(midnight.getTime());
+        const nextDayStr = formatDate(nextDay);
+        if (!insights[nextDayStr]) insights[nextDayStr] = {};
+        insights[nextDayStr][label] = (insights[nextDayStr][label] || 0) + durationAfterMidnight;
+    }
+}
+
 function fetchAndDisplayInsights() {
     fetch('/api/stats')
     .then(response => response.json())
     .then(data => {
-        // Filter data by currentDate
-        const filteredData = data.filter(stat => formatDate(new Date(stat.start)) === formatDate(currentDate));
-        const insights = {}; // Object to hold total duration by label
+        const insights = {}; // Object to hold total duration by label for each day
 
-        filteredData.forEach(stat => {
-            if (!insights[stat.label]) {
-                insights[stat.label] = 0;
-            }
-            insights[stat.label] += stat.time;
+        data.forEach(stat => {
+            const startDate = new Date(stat.start);
+            distributeDuration(startDate, stat.time, stat.label, insights);
         });
 
-        displayInsights(insights);
+        // Extract insights for the current date and display them
+        const formattedCurrentDate = formatDate(currentDate);
+        const currentDateInsights = insights[formattedCurrentDate] || {};
+        // Convert insights for current date to a format suitable for charting
+        displayInsights(currentDateInsights);
     })
     .catch(error => console.error('Error fetching statistics:', error));
 }
