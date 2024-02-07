@@ -37,6 +37,14 @@ function updateDisplay() {
 }
 
 function toggleTimer() {
+    
+    const timerLabel = timerLabelInput.value.trim();
+    // Check if the label is empty before starting the timer
+    if (!running && !timerLabel) {
+        // Alert the user or handle this case as needed
+        alert("Please enter a label before starting the timer.");
+        return; // Exit the function early
+    }
     if (running) {
         clearInterval(timerInterval);
         startStopButton.textContent = 'Start';
@@ -51,7 +59,7 @@ function toggleTimer() {
             time++;
             updateDisplay();
         }, 1000);
-        startStopButton.textContent = 'Stop';
+        startStopButton.textContent = 'Pause';
         running = true;
     }
 }
@@ -116,11 +124,21 @@ function displayStatistics(data) {
     table.appendChild(thead);
     table.appendChild(tbody);
 
-    const headings = ['No.', 'Label Name', 'Duration', 'Start Date', 'End Date', 'Start Time', 'End Time'];
+    const headings = ['No.', 'Label Name', 'Duration', 'Start Date', 'End Date', 'Start Time', 'End Time', 'Delete All'];
     const trHead = document.createElement('tr');
     headings.forEach(heading => {
         const th = document.createElement('th');
-        th.textContent = heading;
+        if (heading === 'Delete All') {
+            // Make the delete column heading clickable
+            const deleteAllSpan = document.createElement('span');
+            deleteAllSpan.textContent = heading;
+            deleteAllSpan.style.cursor = 'pointer';
+            deleteAllSpan.className = 'delete-all-btn';
+            deleteAllSpan.addEventListener('click', deleteAllStatistics);
+            th.appendChild(deleteAllSpan);
+        } else {
+            th.textContent = heading;
+        }
         trHead.appendChild(th);
     });
     thead.appendChild(trHead);
@@ -136,6 +154,7 @@ function displayStatistics(data) {
         const endDate = new Date(stat.end).toLocaleDateString('en-IN', dateOptions);
         const startTime = new Date(stat.start).toLocaleTimeString('en-IN', timeOptions);
         const endTime = new Date(stat.end).toLocaleTimeString('en-IN', timeOptions);
+        
 
         const cells = [index + 1, stat.label, duration, startDate, endDate, startTime, endTime];
         cells.forEach(cell => {
@@ -144,6 +163,18 @@ function displayStatistics(data) {
             tr.appendChild(td);
         });
 
+        // Add a cell with a trash icon for the delete action
+        const deleteCell = document.createElement('td');
+        deleteCell.innerHTML = `<i class="fas fa-trash-alt" style="cursor: pointer;"></i>`;
+        deleteCell.firstChild.addEventListener('click', function() {
+            const confirmed = confirm("Do you really want to delete this entry?");
+            if (confirmed) {
+                deleteStatistic(stat._id);
+            }
+        });
+        tr.appendChild(deleteCell);
+
+        
         tbody.appendChild(tr);
     });
 
@@ -167,14 +198,30 @@ function fetchLabels() {
 
 
 startStopButton.addEventListener('click', toggleTimer);
-resetButton.addEventListener('click', resetTimer);
+// Show Reset Confirmation Modal
+resetButton.addEventListener('click', function() {
+    $('#resetModal').modal('show'); // Use jQuery to show the modal
+});
+
+// Actual reset action
+document.getElementById('confirmReset').addEventListener('click', function() {
+    resetTimer();
+    $('#resetModal').modal('hide'); // Hide the modal after confirming
+});
+
+// Show End Session Confirmation Modal
 endSessionButton.addEventListener('click', function() {
+    $('#endSessionModal').modal('show'); // Use jQuery to show the modal
+});
+// Actual end session action
+document.getElementById('confirmEndSession').addEventListener('click', function() {
     if (running) {
-        toggleTimer();
+        toggleTimer(); // Stop the timer
     }
     endTime = new Date(); // Set end time
     saveStatistic(time);
     resetTimer();
+    $('#endSessionModal').modal('hide'); // Hide the modal after confirming
 });
 
 // Call fetchLabels when the page loads
@@ -182,3 +229,32 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchLabels();
     fetchStatistic(); // Assuming you want to also fetch statistics on page load
 });
+
+function deleteStatistic(id) {
+    fetch(`/api/delete/${id}`, {
+        method: 'DELETE',
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log(data.message);
+        fetchStatistic(); // Refresh the log table after deletion
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+function deleteAllStatistics() {
+    const confirmed = confirm("Do you really want to delete all log entries?");
+    if (confirmed) {
+        // Assuming you have an endpoint '/api/delete-all' for deleting all entries
+        fetch('/api/delete-all', {
+            method: 'DELETE',
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('All entries deleted:', data);
+            fetchStatistic(); // Refresh the log table to show it's empty
+        })
+        .catch(error => console.error('Error deleting all statistics:', error));
+    }
+}
+

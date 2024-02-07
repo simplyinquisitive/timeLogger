@@ -56,3 +56,29 @@ app.get('/api/labels', (req, res) => {
         res.json(labels);
     });
 });
+
+app.delete('/api/delete/:id', (req, res) => {
+    const { id } = req.params; // Extract the ID from the request parameters
+    db.remove({ _id: id }, {}, (err, numRemoved) => {
+        if (err) {
+            res.status(500).send("Database error");
+            return;
+        }
+        if (numRemoved) {
+            res.json({ message: 'Deleted successfully', _id: id });
+        } else {
+            res.status(404).send("Not Found");
+        }
+    });
+});
+
+// API to delete all timer statistics
+app.delete('/api/delete-all', (req, res) => {
+    db.remove({}, { multi: true }, (err, numRemoved) => {
+        if (err) {
+            res.status(500).send("Database error");
+            return;
+        }
+        res.json({ message: `Deleted successfully: ${numRemoved} entries` });
+    });
+});
