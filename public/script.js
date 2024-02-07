@@ -4,6 +4,7 @@ let running = false;
 let sessionActive = false; // To track if a session is active
 let startTime, endTime;
 let usedLabels = []; // Store used labels for suggestions
+let currentDate = new Date();
 
 const display = document.getElementById('display');
 const startStopButton = document.getElementById('startStop');
@@ -267,4 +268,113 @@ function deleteAllStatistics() {
         .catch(error => console.error('Error deleting all statistics:', error));
     }
 }
+
+function formatDate(date) {
+    return date.toISOString().split('T')[0]; // Returns date in 'YYYY-MM-DD' format
+}
+
+function updateDateDisplay() {
+    // Format the current date to 'YYYY-MM-DD' and set it as the value of the date picker
+    document.getElementById('datePicker').value = formatDate(currentDate);
+    fetchAndDisplayInsights();
+}
+
+function fetchAndDisplayInsights() {
+    fetch('/api/stats')
+    .then(response => response.json())
+    .then(data => {
+        // Filter data by currentDate
+        const filteredData = data.filter(stat => formatDate(new Date(stat.start)) === formatDate(currentDate));
+        const insights = {}; // Object to hold total duration by label
+
+        filteredData.forEach(stat => {
+            if (!insights[stat.label]) {
+                insights[stat.label] = 0;
+            }
+            insights[stat.label] += stat.time;
+        });
+
+        displayInsights(insights);
+    })
+    .catch(error => console.error('Error fetching statistics:', error));
+}
+
+function displayInsights(insights) {
+    const ctx = document.getElementById('dailyInsightsChart').getContext('2d');
+    const labels = Object.keys(insights);
+    let dataPoints = Object.values(insights); // Keep data in seconds initially
+
+    // Determine the maximum value to decide the unit
+    const maxValue = Math.max(...dataPoints);
+    let unit = 'Seconds';
+    let conversionFactor = 1; // No conversion needed for seconds
+
+    if (maxValue > 3600) { // More than an hour
+        unit = 'Hours';
+        conversionFactor = 3600;
+    } else if (maxValue > 60) { // More than a minute
+        unit = 'Minutes';
+        conversionFactor = 60;
+    }
+
+    // Convert data points to the decided unit
+    dataPoints = dataPoints.map(seconds => (seconds / conversionFactor).toFixed(2));
+
+    // Clear any previous chart instance
+    if (window.myBarChart) {
+        window.myBarChart.destroy();
+    }
+
+    window.myBarChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '', // No dataset label
+                data: dataPoints,
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: unit // Dynamic y-axis label based on data magnitude
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false // Hide the legend
+                }
+            }
+        }
+    });
+}
+document.getElementById('prevDay').addEventListener('click', () => {
+    currentDate.setDate(currentDate.getDate() - 1);
+    updateDateDisplay(); // This now also updates the date picker
+});
+
+document.getElementById('nextDay').addEventListener('click', () => {
+    currentDate.setDate(currentDate.getDate() + 1);
+    updateDateDisplay(); // This now also updates the date picker
+});
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    currentDate = new Date(); // Ensures currentDate is today
+    updateDateDisplay(); // Sets the date picker value and loads insights
+});
+
+document.getElementById('datePicker').addEventListener('change', (e) => {
+    currentDate = new Date(e.target.value);
+    fetchAndDisplayInsights(); // Fetch and display insights for the newly selected date
+});
+
 
