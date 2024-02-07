@@ -148,7 +148,7 @@ function displayStatistics(data) {
         const duration = new Date(stat.time * 1000).toISOString().substr(11, 8);
 
         const dateOptions = { year: '2-digit', month: '2-digit', day: '2-digit', timeZone: 'Asia/Kolkata' };
-        const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' };
 
         const startDate = new Date(stat.start).toLocaleDateString('en-IN', dateOptions);
         const endDate = new Date(stat.end).toLocaleDateString('en-IN', dateOptions);
@@ -211,18 +211,28 @@ document.getElementById('confirmReset').addEventListener('click', function() {
 
 // Show End Session Confirmation Modal
 endSessionButton.addEventListener('click', function() {
+    if (running) {
+        toggleTimer(); // Pause the timer
+    }
     $('#endSessionModal').modal('show'); // Use jQuery to show the modal
 });
+
+// Listen for the modal being closed without confirmation (i.e., the user clicked "No" or closed the modal)
+$('#endSessionModal').on('hidden.bs.modal', function () {
+    if (!running && sessionActive) { // Check if the session was active but not running (paused)
+        toggleTimer(); // Resume the timer
+    }
+});
+
 // Actual end session action
 document.getElementById('confirmEndSession').addEventListener('click', function() {
-    if (running) {
-        toggleTimer(); // Stop the timer
-    }
-    endTime = new Date(); // Set end time
+    endTime = new Date(); // Set end time since the user has confirmed to end the session
     saveStatistic(time);
     resetTimer();
+    sessionActive = false; // Ensure sessionActive is reset
     $('#endSessionModal').modal('hide'); // Hide the modal after confirming
 });
+
 
 // Call fetchLabels when the page loads
 document.addEventListener('DOMContentLoaded', () => {
