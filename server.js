@@ -43,3 +43,16 @@ app.get('/api/stats', (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
+// API to fetch unique labels
+app.get('/api/labels', (req, res) => {
+    db.find({}).exec((err, docs) => {
+        if (err) {
+            res.status(500).send("Database error");
+            return;
+        }
+        // Extract unique labels
+        const labels = [...new Set(docs.map(doc => doc.label))];
+        res.json(labels);
+    });
+});
