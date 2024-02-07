@@ -5,6 +5,8 @@ let sessionActive = false; // To track if a session is active
 let startTime, endTime;
 let usedLabels = []; // Store used labels for suggestions
 let currentDate = new Date();
+let pauseTimes = [];
+let resumeTimes = [];
 
 const display = document.getElementById('display');
 const startStopButton = document.getElementById('startStop');
@@ -38,23 +40,26 @@ function updateDisplay() {
 }
 
 function toggleTimer() {
-    
     const timerLabel = timerLabelInput.value.trim();
-    // Check if the label is empty before starting the timer
     if (!running && !timerLabel) {
-        // Alert the user or handle this case as needed
         alert("Please enter a label before starting the timer.");
-        return; // Exit the function early
+        return;
     }
+
     if (running) {
         clearInterval(timerInterval);
         startStopButton.textContent = 'Start';
         running = false;
+        // Record pause time
+        pauseTimes.push(new Date().toISOString());
     } else {
         if (!sessionActive) {
             startTime = new Date();
             sessionActive = true;
             endSessionButton.style.display = 'inline-block';
+        } else {
+            // Record resume time if it's not the first start
+            resumeTimes.push(new Date().toISOString());
         }
         timerInterval = setInterval(() => {
             time++;
@@ -90,6 +95,8 @@ function saveStatistic(timeElapsed) {
             start: startTime.toISOString(),
             end: endTime.toISOString(),
             label: label,
+            pauseTimes: pauseTimes, // Include pause times
+            resumeTimes: resumeTimes, // Include resume times
         }),
     })
     .then(response => response.json())

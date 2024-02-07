@@ -19,6 +19,8 @@ app.post('/api/save', (req, res) => {
         time: req.body.time,
         start: req.body.start,
         end: req.body.end,
+        pauseTimes: req.body.pauseTimes || [], // Default to empty array if not provided
+        resumeTimes: req.body.resumeTimes || [], // Default to empty array if not provided
         createdAt: new Date()
     };
     db.insert(statistic, (err, newDoc) => {
