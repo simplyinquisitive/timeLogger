@@ -280,7 +280,13 @@ function deleteAllStatistics() {
 }
 
 function formatDate(date) {
-    return date.toISOString().split('T')[0]; // Returns date in 'YYYY-MM-DD' format
+    // Using toLocaleDateString to ensure the date is formatted according to the 'en-IN' locale
+    return new Date(date).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        timeZone: 'Asia/Kolkata'
+    }).split('/').reverse().join('-'); // Reformatting to 'YYYY-MM-DD' for consistency
 }
 
 function updateDateDisplay() {
