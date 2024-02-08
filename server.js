@@ -46,6 +46,27 @@ app.get('/api/stats', (req, res) => {
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 
+app.get('/api/specStats', (req, res) => {
+    if (!req.query.date) {
+        return res.status(400).send("Date query parameter is required.");
+    }
+
+    // Convert the 'en-IN' local date to the UTC date range for filtering
+    const utcStartDate = convertLocalDateToUTC(req.query.date);
+    const utcEndDate = new Date(utcStartDate);
+    utcEndDate.setDate(utcEndDate.getDate() + 1);
+
+    db.find({ 
+        start: { $gte: utcStartDate.toISOString(), $lt: utcEndDate.toISOString() } 
+    }).sort({ createdAt: -1 }).exec((err, docs) => {
+        if (err) {
+            res.status(500).send("Database error");
+            return;
+        }
+        res.json(docs);
+    });
+});
+
 // API to fetch unique labels
 app.get('/api/labels', (req, res) => {
     db.find({}).exec((err, docs) => {
@@ -84,3 +105,17 @@ app.delete('/api/delete-all', (req, res) => {
         res.json({ message: `Deleted successfully: ${numRemoved} entries` });
     });
 });
+
+/**
+ * Converts a local date string in 'YYYY-MM-DD' format to a UTC Date object at 00:00:00 UTC.
+ * @param {string} dateString - The local date string in 'YYYY-MM-DD' format.
+ * @return {Date} - The UTC Date object representing the start of the given date in UTC.
+ */
+function convertLocalDateToUTC(dateString) {
+    // Parse the date string as local time
+    const localDate = new Date(dateString);
+    // Adjust for the timezone offset to get to UTC
+    // Note: This simplistic approach assumes the server's local timezone offset is consistent with the 'en-IN' timezone.
+    const utcDate = new Date(localDate.getTime() + localDate.getTimezoneOffset() * 60000);
+    return utcDate;
+}

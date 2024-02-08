@@ -56,6 +56,8 @@ function toggleTimer() {
         if (!sessionActive) {
             startTime = new Date();
             sessionActive = true;
+            pauseTimes = []; // Reset pause times for the new session
+            resumeTimes = []; // Reset resume times for the new session
             endSessionButton.style.display = 'inline-block';
         } else {
             // Record resume time if it's not the first start
@@ -239,7 +241,7 @@ document.getElementById('confirmEndSession').addEventListener('click', function(
     resetTimer();
     sessionActive = false; // Ensure sessionActive is reset
     $('#endSessionModal').modal('hide'); // Hide the modal after confirming
-    fetchAndDisplayInsights();
+    updateChartsForSelectedDate();
 });
 
 
@@ -257,7 +259,7 @@ function deleteStatistic(id) {
     .then(data => {
         console.log(data.message);
         fetchStatistic(); // Refresh the log table after deletion
-        fetchAndDisplayInsights();
+        updateChartsForSelectedDate();
     })
     .catch(error => console.error('Error:', error));
 }
@@ -273,7 +275,7 @@ function deleteAllStatistics() {
         .then(data => {
             console.log('All entries deleted:', data);
             fetchStatistic(); // Refresh the log table to show it's empty
-            fetchAndDisplayInsights();
+            updateChartsForSelectedDate();
         })
         .catch(error => console.error('Error deleting all statistics:', error));
     }
@@ -292,7 +294,7 @@ function formatDate(date) {
 function updateDateDisplay() {
     // Format the current date to 'YYYY-MM-DD' and set it as the value of the date picker
     document.getElementById('datePicker').value = formatDate(currentDate);
-    fetchAndDisplayInsights();
+    updateChartsForSelectedDate();
 }
 
 function distributeDuration(startDate, duration, label, insights) {
@@ -400,25 +402,158 @@ function displayInsights(insights) {
         }
     });
 }
+function updateChartsForSelectedDate() {
+    // Format currentDate to 'YYYY-MM-DD' for 'en-IN' locale
+    const selectedDate = formatDate(currentDate);
+    
+    // Update the date display and fetch insights for bar chart
+    document.getElementById('datePicker').value = selectedDate;
+    fetchAndDisplayInsights(); // For the existing bar chart
+    fetchAndDisplayLineChartData(selectedDate); // For the new line chart
+}
+
 document.getElementById('prevDay').addEventListener('click', () => {
     currentDate.setDate(currentDate.getDate() - 1);
-    updateDateDisplay(); // This now also updates the date picker
+    updateChartsForSelectedDate();
 });
 
 document.getElementById('nextDay').addEventListener('click', () => {
     currentDate.setDate(currentDate.getDate() + 1);
-    updateDateDisplay(); // This now also updates the date picker
+    updateChartsForSelectedDate();
 });
 
-
 document.addEventListener('DOMContentLoaded', () => {
-    currentDate = new Date(); // Ensures currentDate is today
-    updateDateDisplay(); // Sets the date picker value and loads insights
+    currentDate = new Date(); // Ensures currentDate is set to today
+    updateChartsForSelectedDate(); // Initializes the charts with today's data
 });
 
 document.getElementById('datePicker').addEventListener('change', (e) => {
-    currentDate = new Date(e.target.value);
-    fetchAndDisplayInsights(); // Fetch and display insights for the newly selected date
+    // Ensure the date is interpreted correctly in local time zone 'en-IN'
+    currentDate = new Date(e.target.value + 'T00:00:00+05:30'); // Adjusting for 'Asia/Kolkata' timezone offset if needed
+    updateChartsForSelectedDate();
 });
+
+function fetchAndDisplayLineChartData(selectedDate) {
+    fetch(`/api/specStats?date=${selectedDate}`)
+        .then(response => response.json())
+        .then(data => {
+            // The data is now already filtered for the selected date by the server
+            const insights = prepareLineChartData(data, selectedDate);
+            generateLineChart(insights);
+        })
+        .catch(error => console.error('Error fetching statistics:', error));
+}
+
+function prepareLineChartData(data, selectedDate) {
+    const insights = {};
+    data.forEach(stat => {
+        const label = stat.label;
+        if (!insights[label]) {
+            insights[label] = [];
+        }
+
+        let previousTime = new Date(stat.start);
+        let isLastPauseProcessed = false;
+
+        stat.pauseTimes.forEach((pauseTime, index) => {
+            // Active period before pause
+            insights[label].push({
+                startTime: previousTime,
+                endTime: new Date(pauseTime),
+                type: 'active'
+            });
+
+            // Determine if there's a next resume time or this is the last pause
+            const nextResumeTime = stat.resumeTimes[index] ? new Date(stat.resumeTimes[index]) : null;
+            const nextPauseTime = stat.pauseTimes[index + 1] ? new Date(stat.pauseTimes[index + 1]) : null;
+
+            if (nextResumeTime) {
+                // Inactive period during pause
+                insights[label].push({
+                    startTime: new Date(pauseTime),
+                    endTime: nextResumeTime,
+                    type: 'inactive'
+                });
+                previousTime = nextResumeTime;
+                isLastPauseProcessed = !nextPauseTime; // If no next pause, this is the last processed pause
+            } else {
+                // If there's no resume time, mark the end of the activity as the end of the pause
+                isLastPauseProcessed = true;
+            }
+        });
+
+        // If the last action is a pause with no resume, or there were no pauses
+        if (isLastPauseProcessed || stat.pauseTimes.length === 0) {
+            insights[label].push({
+                startTime: previousTime,
+                endTime: new Date(stat.end),
+                type: isLastPauseProcessed ? 'inactive' : 'active'
+            });
+        }
+    });
+
+    return insights;
+}
+
+function generateLineChart(insights) {
+    const ctx = document.getElementById('activityLineChart').getContext('2d');
+    const datasets = [];
+    const colors = ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#C9CBCF", "#FF9F40"]; // Define more colors as needed
+
+    Object.keys(insights).forEach((label, index) => {
+        const color = colors[index % colors.length];
+        insights[label].forEach(segment => {
+            datasets.push({
+                label: `${label} - ${segment.type}`,
+                data: [{
+                    x: segment.startTime,
+                    y: index + 1, // Adjust Y-axis to differentiate labels/tasks
+                }, {
+                    x: segment.endTime,
+                    y: index + 1,
+                }],
+                borderColor: color,
+                borderWidth: 2,
+                fill: false,
+                tension: 0,
+                spanGaps: false,
+                borderDash: segment.type === 'inactive' ? [5, 5] : [],
+                showLine: true,
+            });
+        });
+    });
+
+    if (window.myLineChart) window.myLineChart.destroy();
+    
+    window.myLineChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        parser: 'yyyy-MM-dd HH:mm:ss',
+                        tooltipFormat: 'dd MMM yyyy HH:mm:ss',
+                        unit: 'minute'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                },
+                y: {
+                    display: false
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            maintainAspectRatio: false
+        }
+    });
+}
 
 
